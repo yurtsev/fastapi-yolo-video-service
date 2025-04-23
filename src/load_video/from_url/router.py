@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Form
-from src.load_video.from_url.service import youtube_video
+from fastapi import APIRouter, Query
+from src.load_video.from_url.service import download_video
 
 router = APIRouter()
 
-@router.post("/youtube")
-def youtube_download(url: str = Form(...)):
-    video_path = youtube_video(url)
+
+@router.post("/url")
+def download_video_from_url(url: str = Query(...)):
+    video_path = download_video(url)
     return {"video_path": video_path}
