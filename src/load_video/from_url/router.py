@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Query
-from src.load_video.from_url.service import download_video
+from fastapi import APIRouter
+from src.track_video.schemas import VideoRequest
+from src.track_video.service import annotate_video
+from src.load_video.from_url.service import download_video_url
+
 
 router = APIRouter()
 
 
 @router.post("/url")
-def download_video_from_url(url: str = Query(...)):
-    video_path = download_video(url)
-    return {"video_path": video_path}
+def download_video_from_url(data: VideoRequest) -> str:
+    video_path = download_video_url(str(data.url))
+    return annotate_video(video_path, data.objects)
