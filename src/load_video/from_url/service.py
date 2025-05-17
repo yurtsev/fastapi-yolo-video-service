@@ -1,6 +1,9 @@
 from pathlib import Path
 import yt_dlp
 import re
+import socket
+from yt_dlp.utils import DownloadError
+from fastapi import HTTPException
 
 DOWNLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "download"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
@@ -15,6 +18,7 @@ def rename_file() -> Path:
     return DOWNLOAD_DIR / f"{next_idx}.mp4"
 
 def download_video_url(url: str) -> Path:
+
     name = rename_file()
 
     ydl_opts = {
@@ -30,10 +34,33 @@ def download_video_url(url: str) -> Path:
         "quiet": True,
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+    except DownloadError as e:
+        msg = str(e).strip()
+
+        if "HTTP Error 404" in msg or "404 Client Error" in msg:
+            raise HTTPException(status_code=404, detail=f"Video not found")
+
+        if "HTTP Error 403" in msg or "403 Client Error" in msg:
+            raise HTTPException(status_code=403, detail=f"Access forbidden")
+
+        raise HTTPException(status_code=502, detail=f"Download failed")
+
+    except socket.gaierror as e:
+
+        raise HTTPException(status_code=503, detail=f"Network error")
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Unexpected error")
 
     if not name.exists():
-        raise RuntimeError("yt-dlp did not produce an .mp4 file")
+        raise HTTPException(
+            status_code=500,
+            detail="Download reported success but output file is missing"
+        )
 
     return name
