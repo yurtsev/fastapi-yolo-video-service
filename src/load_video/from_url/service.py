@@ -1,21 +1,39 @@
-from pytube import YouTube
-import tempfile
+from pathlib import Path
 import yt_dlp
+import re
 
-def youtube_video(url: str) -> str:
-    yt = YouTube(url)
+DOWNLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "download"
+DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-    stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+def rename_file() -> Path:
+    existing = []
+    for p in DOWNLOAD_DIR.glob("*.mp4"):
+        m = re.fullmatch(r"(\d+)\.mp4", p.name)
+        if m:
+            existing.append(int(m.group(1)))
+    next_idx = max(existing, default=0) + 1
+    return DOWNLOAD_DIR / f"{next_idx}.mp4"
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        stream.download(filename=temp_file.name)
-        return temp_file.name
+def download_video_url(url: str) -> Path:
+    name = rename_file()
 
+    ydl_opts = {
+        "outtmpl": str(name),
+        "format": (
+            "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]"
+            "/best[ext=mp4][vcodec^=avc1]"
+            "/best"
+        ),
+        "merge_output_format": "mp4",
+        "ffmpeg_location": "/opt/homebrew/bin/ffmpeg",
+        "fixup": "detect_or_warn",
+        "quiet": True,
+    }
 
-def download_video(url: str) -> str:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        ydl_opts = {"outtmpl": temp_file.name, "format": "best[ext=mp4]/best", "quiet": True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return temp_file.name
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
 
+    if not name.exists():
+        raise RuntimeError("yt-dlp did not produce an .mp4 file")
+
+    return name
