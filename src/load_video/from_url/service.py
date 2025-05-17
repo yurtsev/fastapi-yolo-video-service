@@ -42,20 +42,20 @@ def download_video_url(url: str) -> Path:
         msg = str(e).strip()
 
         if "HTTP Error 404" in msg or "404 Client Error" in msg:
-            raise HTTPException(status_code=404, detail=f"Video not found")
+            raise HTTPException(status_code=404, detail="Video not found")
 
         if "HTTP Error 403" in msg or "403 Client Error" in msg:
-            raise HTTPException(status_code=403, detail=f"Access forbidden")
+            raise HTTPException(status_code=403, detail="Access forbidden")
 
-        raise HTTPException(status_code=502, detail=f"Download failed")
+        raise HTTPException(status_code=502, detail="Download failed")
 
-    except socket.gaierror as e:
+    except socket.gaierror:
 
-        raise HTTPException(status_code=503, detail=f"Network error")
+        raise HTTPException(status_code=503, detail="Network error")
 
-    except Exception as e:
+    except Exception:
 
-        raise HTTPException(status_code=500, detail=f"Unexpected error")
+        raise HTTPException(status_code=500, detail="Unexpected error")
 
     if not name.exists():
         raise HTTPException(
