@@ -1,12 +1,14 @@
-from pathlib import Path
-import yt_dlp
 import re
 import socket
-from yt_dlp.utils import DownloadError
+from pathlib import Path
+
+import yt_dlp
 from fastapi import HTTPException
+from yt_dlp.utils import DownloadError
 
 DOWNLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "download"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
+
 
 def rename_file() -> Path:
     existing = []
@@ -14,8 +16,9 @@ def rename_file() -> Path:
         m = re.fullmatch(r"(\d+)\.mp4", p.name)
         if m:
             existing.append(int(m.group(1)))
-    next_idx = max(existing, default=0) + 1
-    return DOWNLOAD_DIR / f"{next_idx}.mp4"
+    next_id = max(existing, default=0) + 1
+    return DOWNLOAD_DIR / f"{next_id}.mp4"
+
 
 def download_video_url(url: str) -> Path:
 
@@ -60,7 +63,7 @@ def download_video_url(url: str) -> Path:
     if not name.exists():
         raise HTTPException(
             status_code=500,
-            detail="Download reported success but output file is missing"
+            detail="Download reported success but output file is missing",
         )
 
     return name
