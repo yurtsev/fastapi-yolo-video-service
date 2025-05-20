@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence, Optional
-import logging
-from tqdm import tqdm
+from typing import List, Optional
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 from ultralytics import YOLO
 
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.track_video import VideoResponse
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "annotated"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -20,56 +17,99 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MODEL = YOLO("yolov8n.pt")
 
 
-NAME_TO_IDX = {v: k for k, v in MODEL.names.items()}
+def clean_objects_arr(objects: list[str]) -> list[str]:
+    clean_arr = []
+    for o in objects:
+        cleaned = o.strip().lower()
+        clean_arr.append(cleaned)
+    return clean_arr
 
 
-def normalize(objects: Optional[list[str]]) -> Optional[list[int]]:
+def reverse_dict_model() -> dict[str, int]:
+    class_index = {}
+    for index, class_name in MODEL.names.items():
+        class_index[class_name] = index
+    return class_index
+
+
+def model_index(objects: Optional[list[str]]) -> list[int] | None:
     if not objects:
         return None
-    idx = [i for i, n in MODEL.names.items() if n in {o.strip().lower() for o in objects}]
-    return idx or None
+
+    clean_arr = clean_objects_arr(objects)
+    class_index = reverse_dict_model()
+    result_for_model = []
+    for o in clean_arr:
+        if o in class_index:
+            result_for_model.append(class_index[o])
+    return result_for_model or None
 
 
+def ignore_objects(objects: list[str]) -> set[str] | None:
+    clean_arr = clean_objects_arr(objects)
+    class_index = reverse_dict_model()
+    ignore = set()
+    for o in clean_arr:
+        if o not in class_index:
+            ignore.add(o)
+    if ignore:
+        return ignore
+    return None
 
-def filter_result(result, target_idx: list[int] | None):
-    if target_idx is None:
+
+def final_objects(objects: list[str]) -> set[str] | None:
+    request = clean_objects_arr(objects)
+    class_index = reverse_dict_model()
+    ignore = set()
+    for o in request:
+        if o not in class_index:
+            ignore.add(o)
+    new_objects = set(request) - ignore
+    return new_objects
+
+
+def filter_result(result, target_id: list[int] | None):
+    if target_id is None:
         return result
 
-    cls_arr = result.boxes.cls.cpu().numpy()
-    mask = np.isin(cls_arr, target_idx)
+    cls_arr = result.boxes.cls.cpu()
+    mask = np.isin(cls_arr, target_id)
     result.boxes = result.boxes[mask]
     return result
 
 
+def annotate_video(
+    input_path: str, objects: Optional[List[str]] = None
+) -> VideoResponse | None:
 
-def annotate_video(input_path: str, objects: str | Sequence[str] | None = None) -> str:
+    file = Path(input_path).expanduser().resolve()
+    if not file.is_file():
+        raise FileNotFoundError(file)
 
-    src = Path(input_path).expanduser().resolve()
-    if not src.is_file():
-        raise FileNotFoundError(src)
+    filter_objects = model_index(objects)
+    ignore = ignore_objects(objects)
+    my_objects = final_objects(objects)
 
-    logger.info("Начало обработки видео")
-    obj_list = normalize(objects)
-    idx_list = None if obj_list is None else [NAME_TO_IDX[o] for o in obj_list]
+    if filter_objects is None:
+        suffix = "all"
+    else:
+        suffix = "-".join(my_objects)
 
-    suffix = "all" if obj_list is None else "-".join(obj_list)
-    dst = OUTPUT_DIR / f"annotated_{suffix}_{src.stem}.mp4"
+    out_file = OUTPUT_DIR / f"annotated_{suffix}_{file.stem}.mp4"
 
-    cap = cv2.VideoCapture(str(src))
+    cap = cv2.VideoCapture(str(file))
     if not cap.isOpened():
         raise RuntimeError("Cannot open video file")
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
     pbar = tqdm(total=total_frames, desc="Annotating", unit="frame")
 
-    width, height = (
-        int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-        int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-    )
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
 
     fourcc = cv2.VideoWriter.fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(dst), fourcc, fps, (width, height))
+    writer = cv2.VideoWriter(str(out_file), fourcc, fps, (width, height))
 
     try:
         while True:
@@ -78,7 +118,7 @@ def annotate_video(input_path: str, objects: str | Sequence[str] | None = None) 
                 break
 
             result = MODEL(frame, conf=0.25, verbose=False)[0]
-            result = filter_result(result, idx_list)
+            result = filter_result(result, filter_objects)
             writer.write(result.plot())
             pbar.update(1)
 
@@ -87,6 +127,4 @@ def annotate_video(input_path: str, objects: str | Sequence[str] | None = None) 
         writer.release()
         pbar.close()
 
-    logger.info("Обработка завершена")
-    return str(dst)
-
+    return VideoResponse(path=str(out_file), ignore=ignore)
