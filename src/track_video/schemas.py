@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional, Set
 
 from pydantic import BaseModel, HttpUrl
@@ -9,5 +10,5 @@ class VideoRequest(BaseModel):
 
 
 class VideoResponse(BaseModel):
-    path: str
+    path: Path
     ignore: Optional[Set[str]]
