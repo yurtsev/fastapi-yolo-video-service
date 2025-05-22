@@ -127,4 +127,4 @@ def annotate_video(
         writer.release()
         pbar.close()
 
-    return VideoResponse(path=str(out_file), ignore=ignore)
+    return VideoResponse(path=out_file, ignore=ignore)
