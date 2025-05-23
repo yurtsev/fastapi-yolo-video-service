@@ -1,11 +1,35 @@
-FROM python:3.10-slim
-
+FROM python:3.12-slim AS builder
 WORKDIR /backend
 
-COPY ./requirements.txt /backend/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+            gcc \
+            libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY ./src /backend/src
+RUN pip install --no-cache-dir uv
 
-CMD uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+COPY pyproject.toml .
+COPY uv.lock .
+
+RUN pip install uv && uv pip install --editable . --system
+
+FROM python:3.12-slim
+WORKDIR /backend
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local /usr/local
+
+COPY src src
+COPY yolov8n.pt .
+COPY .env .
+
+CMD ["python", "-m", "src.main"]
