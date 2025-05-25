@@ -1,35 +1,16 @@
-import re
 import socket
 from pathlib import Path
+from typing import List, Optional
 
 import yt_dlp
 from fastapi import HTTPException, UploadFile
-from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-DOWNLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "download"
-DOWNLOAD_DIR.mkdir(exist_ok=True)
-
-
-def get_video_length_from_url(url: str) -> float:
-
-    ydl_opts = {
-        "quiet": True,
-        "skip_download": True,
-    }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    return float(info.get("duration") or 0.0)
-
-
-def rename_file() -> Path:
-    existing = []
-    for p in DOWNLOAD_DIR.glob("*.mp4"):
-        m = re.fullmatch(r"(\d+)\.mp4", p.name)
-        if m:
-            existing.append(int(m.group(1)))
-    next_id = max(existing, default=0) + 1
-    return DOWNLOAD_DIR / f"{next_id}.mp4"
+from src.load_video.schemas import VideoResponse
+from src.load_video.utils import get_video_length_from_url, rename_file
+from src.minio_client import upload_file_to_minio
+from src.redis_client import add_annotated_video_to_redis
+from src.track_video import annotate_video
 
 
 def download_video_pc(uploaded_file: UploadFile) -> Path:
@@ -101,3 +82,24 @@ def download_video_url(url: str) -> Path:
         )
 
     return name
+
+
+def router_annotate_video(
+    file_path: Path, data: Optional[List[str]] = None
+) -> VideoResponse:
+
+    result = annotate_video(str(file_path), data)
+
+    video_path = result.path
+    ignore = result.ignore
+    objects = result.objects
+
+    link = upload_file_to_minio(video_path)
+    video_path.unlink(missing_ok=True)
+    file_path.unlink(missing_ok=True)
+
+    video_id = add_annotated_video_to_redis(
+        username="yurtsev", url=link, objects=objects, ignore=ignore
+    )
+
+    return VideoResponse(minio_url=link, video_id=video_id)
