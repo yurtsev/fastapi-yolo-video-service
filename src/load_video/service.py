@@ -1,9 +1,10 @@
 import socket
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 import yt_dlp
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, Request, Response
 from yt_dlp.utils import DownloadError
 
 from src.load_video.schemas import VideoResponse
@@ -84,11 +85,9 @@ def download_video_url(url: str) -> Path:
     return name
 
 
-def router_annotate_video(
-    file_path: Path, data: Optional[List[str]] = None
-) -> VideoResponse:
+def router_annotate_video(session_id, file_path: Path, data: Optional[List[str]] = None, ) -> VideoResponse:
 
-    result = annotate_video(str(file_path), data)
+    result = annotate_video(str(file_path), objects=data)
 
     video_path = result.path
     ignore = result.ignore
@@ -99,7 +98,20 @@ def router_annotate_video(
     file_path.unlink(missing_ok=True)
 
     video_id = add_annotated_video_to_redis(
-        username="yurtsev", url=link, objects=objects, ignore=ignore
+        username=session_id, url=link, objects=objects
     )
 
-    return VideoResponse(minio_url=link, video_id=video_id)
+    return VideoResponse(minio_url=link, video_id=video_id, user_id=session_id, ignore=ignore)
+
+
+def set_cookie(request: Request, response: Response):
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        session_id = uuid4().hex
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            max_age=60 * 60 * 24 * 365,  # год
+        )
+    return session_id
