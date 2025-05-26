@@ -17,7 +17,6 @@ def get_minio_client() -> Minio:
 
 def upload_file_to_minio(path: Path, content_type: str = "video/mp4") -> str:
     client = get_minio_client()
-
     bucket = settings.MINIO_BUCKET_NAME
     if not client.bucket_exists(bucket):
         client.make_bucket(bucket)
@@ -30,4 +29,4 @@ def upload_file_to_minio(path: Path, content_type: str = "video/mp4") -> str:
         content_type=content_type,
     )
 
-    return f"http://{settings.MINIO_ENDPOINT}/{bucket}/{unique_filename}"
+    return f"http://{settings.PUBLIC_MINIO_URL}/{bucket}/{unique_filename}"
