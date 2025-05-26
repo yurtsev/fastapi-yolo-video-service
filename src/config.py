@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str
     MINIO_SECRET_KEY: str
     MINIO_BUCKET_NAME: str
+    PUBLIC_MINIO_URL: str
 
     REDIS_HOST: str
     REDIS_PORT: int = 6379
