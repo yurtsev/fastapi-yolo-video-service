@@ -1,10 +1,12 @@
 import uvicorn
 from fastapi import FastAPI
 
-from src.load_video import router as upload_router
+from src.get_video import router as get_video_router
+from src.load_video import router as upload_video_router
 
 app = FastAPI()
-app.include_router(upload_router, prefix="/video", tags=["Video"])
+app.include_router(upload_video_router, prefix="/upload_video", tags=["annotate"])
+app.include_router(get_video_router, prefix="/get_video", tags=["get_video"])
 
 
 @app.get("/")
