@@ -11,3 +11,5 @@ class VideoRequest(BaseModel):
 class VideoResponse(BaseModel):
     minio_url: str
     video_id: str
+    user_id: str
+    ignore: Optional[List[str]] = None
